@@ -1,0 +1,187 @@
+<div id="map">
+
+</div>
+<div id="nav"></div>
+<div style="display: flex; justify-content: space-between;" id="flex"></div>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="points.js"></script>
+<script src="palettes.js"></script>
+<script src="TileLayer.Grayscale.js"></script>
+<script src="https://code.highcharts.com/stock/highstock.js"></script>
+<script src="https://code.highcharts.com/modules/navigator.js"></script>
+
+
+<style>
+  #map {
+    height: 85vh;
+  }
+
+  /* #map {
+    width: 300vw;
+    height: 300vh;
+   } */
+  #nav {
+    width: 95vw;
+    /* height: 50px; */
+  }
+</style>
+
+
+<script>
+
+
+  var map = L.map("map");
+  // Not working
+  // var tilelayer = 'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}'
+  // var tilelayer = "http://{s}.tile.osm.org/{z}/{x}/{y}.png"
+
+  // Working
+  // var tilelayer = 'https://{s}.tile.thunderforest.com/pioneer/{z}/{x}/{y}.png?apikey=db5ae1f5778a448ca662554581f283c5'
+  // var tilelayer = "https://cartodb-basemaps-{s}.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png"
+  var tilelayer = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+
+  L.tileLayer.grayscale(tilelayer).addTo(map);
+
+  map.setView([48.85, 2.35], 8);
+
+  var myRenderer = L.canvas({ padding: 0.5 });
+
+  console.log(rawPoints.length)
+
+  function generateRandomHexColor() {
+    // Generate a random number between 0 and 16777215 (0xFFFFFF)
+    const randomNumber = Math.floor(Math.random() * 16777216);
+    // Convert the number to a hex string and pad with zeros if necessary
+    const hexColor = `#${randomNumber.toString(16).padStart(6, '0')}`;
+    return hexColor;
+  }
+
+  const palette = "arctic";
+  function hexForGradient(val, min, max) {
+    const vms = new Date(val).getTime();
+    const perc = (vms - min) / (max - min) * 100;
+    const a = window.palettes[palette].find((p) => p.percent > perc);
+    return a.colour;
+
+  }
+
+  function hslForGradient(val, min, max) {
+    const vms = new Date(val).getTime();
+    let perc = (vms - min) / (max - min);
+    if (perc < 0) { perc = 0; }
+    return `hsl(${Math.round(perc * 300)} 100% 50%)`; // limited to blue here.
+
+  }
+
+  const earliest = new Date("1/1/2017");
+  const earliestms = earliest.getTime();
+  const latest = new Date();
+  const latestms = latest.getTime();
+  console.log(earliest, earliestms);
+  console.log(latest, latestms);
+  const startYear = 2016;
+  const currentYear = new Date().getFullYear();
+
+  function doyear(year, month = 1) {
+    const outer = document.createElement("span");
+    const innerYear = document.createElement("span");
+    const a = `${year}-0${month}`
+    innerYear.innerText = a;
+    const innerColour = document.createElement("span")
+    innerColour.innerHTML = " █";
+    innerColour.style.color = hslForGradient(`${year}-0${month}-01`, earliestms, latestms);
+    outer.appendChild(innerYear);
+    outer.appendChild(innerColour)
+    document.getElementById("flex").appendChild(outer)
+    return a;
+  }
+
+  // Create the standalone navigator
+  const ser = []
+
+  for (let year = startYear; year <= currentYear; year++) {
+    doyear(year, 1);
+    doyear(year, 6);
+    ser.push([new Date(`${year}-01`).getTime(), year])
+    ser.push([new Date(`${year}-03`).getTime(), year])
+    ser.push([new Date(`${year}-05`).getTime(), year])
+    ser.push([new Date(`${year}-07`).getTime(), year])
+    ser.push([new Date(`${year}-09`).getTime(), year])
+    ser.push([new Date(`${year}-11`).getTime(), year])
+  }
+
+  let cooldown;
+
+  const nav = Highcharts.stockChart('nav', {
+    chart: {
+      height: 100, // hide the chart just show the navigator.
+    },
+    xAxis: {
+      ordinal: true,
+      type: 'datetime',
+      events: {
+        afterSetExtremes: e => {
+          clearTimeout(cooldown);
+          cooldown = setTimeout(() => {
+            const ext = nav.series[0].xAxis.getExtremes()
+            clearGraph();
+            doGraph(ext.userMin, ext.userMax)
+          }, 500)
+        }
+
+      },
+    },
+    navigator: {
+      height: 20,
+    },
+
+    series: [{
+      data: ser
+    }]
+  });
+
+  const mapPoints = [];
+
+  function doGraph(start, stop) {
+    console.log(`Making graph from ${start} to ${stop}`)
+    for (a of rawPoints) {
+      const thisms = new Date(a[1]).getTime();
+      console.log(thisms > stop)
+      console.log(thisms < start)
+      if ((thisms > start)) {
+        // console.log(a)
+        // const c = hexForGradient(a[1], earliestms, latestms);
+        const c = hslForGradient(a[1], start, stop);
+        // console.log(a[0]);
+        // throw Error("Blah")
+        const b = L.circleMarker(a[0], {
+          renderer: myRenderer,
+          radius: 2,
+          fill: true,
+          opacity: 1,
+          fillOpacity: 1,
+          fillColor: c,
+          weight: 0,
+          color: c
+        }).addTo(map)//.bindPopup('marker ' + i);
+
+        mapPoints.push(b);
+      };
+      if (thisms > stop) { return };
+    }
+  }
+
+  doGraph(earliestms, latestms);
+
+  function clearGraph() {
+    mapPoints.forEach((p) => {
+      map.removeLayer(p)
+    })
+    mapPoints.length = 0;
+  }
+
+</script>
